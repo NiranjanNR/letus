@@ -1,0 +1,35 @@
+name: Deploy User Service to EC2
+
+on:
+  push:
+    branches: [main]
+    paths: ['services/user/**']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SSH Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd /srv/letus
+            git pull origin main
+
+            cd services/user
+            yarn install --frozen-lockfile
+            yarn build
+
+            # Run migrations (idempotent — CREATE IF NOT EXISTS)
+            node scripts/migrate.js
+
+            # Restart with PM2 (or start if first deploy)
+            pm2 restart user-service || pm2 start dist/index.js --name user-service
+
+            echo "✅ User Service deployed successfully"

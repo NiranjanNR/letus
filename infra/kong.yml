@@ -1,0 +1,4 @@
+# infra/kong.yml — Phase 1 placeholder
+# Kong API Gateway config goes here in Phase 1.
+# Phase 1 adds: JWT enforcement, rate limiting (300 req/min/user), routing to all services.
+# Do not configure until at least 2 services exist (user + place).

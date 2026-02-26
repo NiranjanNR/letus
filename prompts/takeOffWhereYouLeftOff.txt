@@ -1,0 +1,171 @@
+You are a senior full-stack mobile engineer helping me build "Letus" — a city-based local discovery and social platform (think Google Maps + Instagram for your city).
+
+═══════════════════════════════════════════════════════
+APP CONCEPT
+═══════════════════════════════════════════════════════
+Users post places they discover in their city. Posts get a "vibe score" based on likes/comments/shares. The app shows a Google Maps-style map with a pull-up bottom sheet (like Snapchat Maps) showing what's trending near you. Feed is Instagram-style but everything is about real places near you.
+
+6 screens:
+1. Map Home — interactive map + pull-up bottom sheet with filter chips (Hot Now, Cafés, Food, Nightlife)
+2. Feed — Instagram-style post cards with vibe scores
+3. Explore — trending places, search, nearby grid
+4. Post — create photo/video/review posts tagged to a place
+5. Reels — TikTok-style fullscreen video feed
+6. Profile — adventurer profile with XP, badges, places visited
+
+═══════════════════════════════════════════════════════
+FULL ARCHITECTURE (target — not all built yet)
+═══════════════════════════════════════════════════════
+Frontend: React Native + Expo SDK 52 (iOS + Android)
+Edge: Cloudflare + Kong API Gateway
+Backend microservices (all Node/Go/Python):
+  - User Service (Node.js) — auth, profiles
+  - Place Service (Go) — GPS-based discovery, 10x geo performance  
+  - Feed Service (Node.js + Redis) — personalised feed
+  - Media Service (Python + FFmpeg) — image/video processing
+  - Search Service (Elasticsearch) — place search autocomplete
+  - Notification Service (NestJS + Firebase) — push notifications
+Databases:
+  - PostgreSQL + PostGIS — primary DB
+  - Redis — feed cache + job queues (BullMQ)
+  - Elasticsearch 8 — search
+  - Neo4j 5 — social graph (follows, friend activity)
+  - AWS S3 + CloudFront — media storage
+Infra: AWS EC2 t3.medium (~$30/month MVP)
+
+═══════════════════════════════════════════════════════
+WHAT'S ACTUALLY BUILT (Phase 0 — code complete)
+═══════════════════════════════════════════════════════
+Monorepo structure (Yarn Workspaces):
+letus/
+├── apps/mobile/          ← React Native + Expo SDK 52
+│   ├── app/_layout.tsx   ← auth guard, QueryClient
+│   ├── app/(tabs)/
+│   │   ├── index.tsx     ← Map Home (blue dot + bottom sheet + filter chips)
+│   │   ├── explore.tsx   ← stub (Phase 1)
+│   │   ├── post.tsx      ← stub (Phase 1)
+│   │   ├── reels.tsx     ← stub (Phase 1)
+│   │   └── profile.tsx   ← shows logged-in user + logout
+│   ├── app/auth/
+│   │   ├── login.tsx     ← full login screen
+│   │   └── signup.tsx    ← full signup screen
+│   ├── lib/apiClient.ts  ← central fetch with auto token refresh
+│   └── store/authStore.ts ← Zustand + SecureStore
+├── services/user/        ← Node.js + Express + TypeScript
+│   ├── src/
+│   │   ├── config/index.ts      ← env validation, crashes if secrets missing
+│   │   ├── db/connection.ts     ← pg Pool with limits + graceful shutdown
+│   │   ├── db/migrations/
+│   │   │   ├── 001_init.sql     ← users, refresh_tokens, posts skeleton
+│   │   │   └── 002_triggers_and_cleanup.sql ← updated_at trigger, token cleanup fn
+│   │   ├── middleware/
+│   │   │   ├── jwt.ts           ← requireAuth middleware
+│   │   │   └── rateLimit.ts     ← in-memory rate limiter (20 req/15min on auth routes)
+│   │   ├── routes/auth.ts       ← /register /login /refresh /logout /me
+│   │   └── index.ts             ← Express server, graceful shutdown, CORS
+│   └── scripts/migrate.js       ← runs SQL migrations in order
+├── infra/
+│   ├── docker-compose.yml       ← builds custom postgres image
+│   ├── Dockerfile.postgres      ← FROM postgres:16 + postgis via apt
+│   └── init-postgis.sh          ← ignored now, extensions in migration
+└── .github/workflows/
+    ├── deploy-backend.yml       ← EC2 SSH deploy on push to main
+    └── eas-build.yml            ← TestFlight build on push to main
+
+═══════════════════════════════════════════════════════
+ARCHITECTURE DECISIONS MADE (senior level)
+═══════════════════════════════════════════════════════
+- Config validation at boot: crashes immediately if JWT_SECRET missing
+- No SELECT *: explicit column lists everywhere
+- Timing-safe login: bcrypt.compare runs even when user not found (prevents email enumeration)
+- Token rotation: refresh tokens are single-use, rotated on every refresh
+- POST /auth/logout: actually invalidates refresh token on server
+- Rate limiting: 20 auth attempts per 15min per IP, in-memory Map (swappable to Redis in Phase 1)
+- CORS allowlist: not wildcard
+- Body size limit: 10kb (prevents DoS)
+- Graceful shutdown: SIGTERM drains connections before exit
+- Pool limits: max 20 connections, timeouts configured
+- No crash on DB error: pool logs and reconnects, /health returns 503
+- updated_at trigger: actually fires on UPDATE (was broken before)
+- Mobile auth guard: single useEffect gated on isLoading (no race condition)
+- apiClient singleton: auto-refreshes expired access token, queues concurrent 401s
+- QueryClient in useRef: stable across renders
+
+═══════════════════════════════════════════════════════
+DEV MACHINE
+═══════════════════════════════════════════════════════
+Mac M2 (Apple Silicon — ARM64)
+Node.js + Git + VS Code + Docker Desktop installed
+Yarn installed
+
+Project location: /Users/niranjan/Desktop/work/lets/letus/
+
+═══════════════════════════════════════════════════════
+DOCKER SETUP (working)
+═══════════════════════════════════════════════════════
+Custom image — infra/Dockerfile.postgres:
+  FROM postgres:16
+  RUN apt-get update && apt-get install -y postgresql-16-postgis-3
+
+Container: letus_postgres
+DB: letus_dev | User: letus | Password: localpassword | Port: 5432
+
+To start DB:
+  cd /Users/niranjan/Desktop/work/lets/letus/infra
+  docker compose up        ← leave this terminal running
+
+═══════════════════════════════════════════════════════
+ENV FILE
+═══════════════════════════════════════════════════════
+Location: services/user/.env (already created)
+Contents:
+  DATABASE_URL=postgresql://letus:localpassword@localhost:5432/letus_dev
+  JWT_SECRET=<32+ char random string — already set>
+  REFRESH_SECRET=<32+ char random string — already set>
+  PORT=3000
+  NODE_ENV=development
+  ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8081
+
+═══════════════════════════════════════════════════════
+CURRENT STATUS
+═══════════════════════════════════════════════════════
+✅ yarn install — complete
+✅ docker compose up — postgres running
+✅ yarn migrate — both migrations ran successfully
+⏳ STOPPED HERE — next step is:
+
+  cd /Users/niranjan/Desktop/work/lets/letus/services/user
+  yarn dev
+
+Expected output:
+  ✅ User Service running on http://localhost:3000
+  [db] Connected to Postgres ✓
+
+Then test with:
+  curl -X POST http://localhost:3000/auth/register \
+    -H "Content-Type: application/json" \
+    -d '{"username":"testuser","email":"test@test.com","password":"password123"}'
+
+Expected: JSON response with accessToken and refreshToken
+
+═══════════════════════════════════════════════════════
+PHASE 0 REMAINING (after server works)
+═══════════════════════════════════════════════════════
+1. yarn dev → server starts ⏳
+2. curl /register → get JWT token ⏳
+3. cd apps/mobile && npx expo start → map on simulator ⏳
+4. Login on real iPhone ⏳
+5. EC2 t3.micro setup + GitHub Actions deploy ⏳
+6. EAS Build → TestFlight ⏳
+7. Recruit 10 founding users ⏳
+
+═══════════════════════════════════════════════════════
+PHASE 1 (after Phase 0 is fully done)
+═══════════════════════════════════════════════════════
+- Place Service (Go + PostGIS)
+- Post creation (photo upload, S3, media processing)
+- Feed fanout (Redis + BullMQ, vibe score formula)
+- Kong API Gateway
+- Animated map pins with pulse
+- Neo4j social graph + friend story circles
+- Explorer XP + badges

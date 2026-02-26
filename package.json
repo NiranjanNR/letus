@@ -1,0 +1,15 @@
+{
+  "name": "letus",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"yarn workspace @letus/user-service dev\" \"yarn workspace @letus/mobile start\"",
+    "migrate": "yarn workspace @letus/user-service migrate"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
