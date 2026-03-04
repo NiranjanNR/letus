@@ -16,7 +16,10 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.letus.app",
       "config": {
-        "googleMapsApiKey": ""
+        "googleMapsApiKey": "AIzaSyCHM2swbMceIjJNa3hL3l4Xv3-iuOjgHbI"
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
